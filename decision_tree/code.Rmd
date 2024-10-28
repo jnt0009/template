@@ -1,0 +1,148 @@
+Here is a short tutorial on building a decision tree with tidymod
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+#### SETUP ####
+pacman::p_load(
+  "tidyverse",
+  "tidymodels",
+  "kableExtra",
+  "finetune",
+  "vip"
+)
+
+df <- read_csv("decision_tree/MBA.csv")
+```
+
+We are looking at a dataset for MBA admissions.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+df <- df |> 
+  mutate(
+    admission = if_else(is.na(admission), "Deny", admission)
+  )
+
+df |> 
+  head() |> 
+  kable() |>
+  kable_styling()
+  
+
+```
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+df |> 
+  group_by(gender) |> 
+  count() |> 
+  kable() |>
+  kable_styling()
+  
+df |> 
+  group_by(race) |> 
+  count() |> 
+  kable() |>
+  kable_styling()
+
+df |> 
+  group_by(international) |> 
+  count() |> 
+  kable() |>
+  kable_styling()
+
+```
+
+```{r}
+df |> 
+  select( where(is.numeric)) |> 
+  select(-application_id) |> 
+  cor() |> 
+  corrplot::corrplot()
+```
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+
+df |> 
+  select(where(is.numeric), admission) |> 
+  pivot_longer(cols = c(2:4)) |> 
+  ggplot(aes(value)) +
+  geom_boxplot() +
+  facet_wrap(~admission*name, scales = "free")
+  
+  
+```
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+tree_spec <- decision_tree(
+  cost_complexity = tune(),
+  tree_depth = tune(),
+  min_n = tune()
+) %>%
+  set_engine("rpart") %>%
+  set_mode("classification")
+
+tree_spec
+```
+
+```{r eval=FALSE, message=FALSE, warning=FALSE, include=FALSE}
+set.seed(504)
+
+mdf_split <- initial_split(df, strata = admission)
+mdf_train <- training(mdf_split)
+mdf_test <- testing(mdf_split)
+
+mdf_folds <- vfold_cv(mdf_train, strata = admission, v = 4)
+
+rec <- mdf_train |>
+  recipe(admission ~ ., data = mdf_train) |> 
+  update_role(application_id, new_role = "id variable") |> 
+  step_interact(~race:gender)
+
+rec |> prep() |> juice()
+
+tree_wf <- workflow() |> add_recipe(rec) |> add_model(tree_spec)
+
+mets <- metric_set(bal_accuracy, f_meas, yardstick::precision, yardstick::recall, roc_auc)
+
+tree_res <- tune_sim_anneal(
+  tree_wf,
+  resamples = mdf_folds,
+  iter = 100,
+  metrics = mets,
+  control = control_sim_anneal(verbose_iter = T, ),
+  # initial = tree_res
+)
+
+```
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+collect_metrics(tree_res) |> 
+  ggplot(aes(.iter, mean)) +
+  geom_point() +
+  facet_wrap(~`.metric`, scales = "free")
+
+# autoplot(tree_res) + theme_light(base_family = "IBMPlexSans")
+
+```
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+best_tree <- tree_res |> select_best(metric = "bal_accuracy")
+
+final_wf <- 
+  tree_wf  |>  
+  finalize_workflow(best_tree)
+
+final_fit <- 
+  final_wf |> 
+  last_fit(mdf_split) 
+
+final_tree <- extract_workflow(final_fit)
+
+final_tree |> 
+  extract_fit_engine() |> 
+  rpart.plot::rpart.plot(roundint = FALSE)
+
+final_tree |> 
+  extract_fit_parsnip() |> 
+  vip()
+
+```
+
