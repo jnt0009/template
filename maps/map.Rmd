@@ -1,0 +1,19 @@
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(sf)
+library(tigris)
+
+
+
+zipcodes <- zctas(year = 2010, state = "CA", progress_bar = FALSE)
+
+us_states <- states(progress_bar = FALSE)
+ca <- us_states |> filter(STUSPS == "CA")
+
+ggplot() +
+  geom_sf(data = ca) +
+  geom_sf(aes(fill = ALAND10, color = ALAND10), data = zipcodes) +
+  theme_void()
+
+```
+
