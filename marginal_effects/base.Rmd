@@ -1,0 +1,80 @@
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+
+library(sf)
+library(marginaleffects)
+library(ggplot2)
+
+tigris::zctas(year = 2010, state = "GA", progress_bar = FALSE)
+
+```
+
+```{r}
+
+cats <- MASS::cats
+
+mod <- lm(Hwt ~ Bwt, data = cats)
+
+mod
+
+mod |> coef()
+
+aggregate(Hwt ~ Bwt, FUN = mean, data = cats) |> 
+  ggplot(aes(Bwt, Hwt)) +
+  geom_point() +
+  geom_smooth()
+  
+
+```
+Difference in coefficients
+```{r}
+
+hypotheses(mod, hypothesis = 0.5)
+# hypotheses(mod, hypothesis = "b2 - b1 = 0")
+
+```
+
+Ratio Test
+```{r}
+
+hypotheses(mod, hypothesis = "b2 / b1 = 0")
+
+```
+Diff and reference
+```{r}
+hypotheses(mod, hypothesis = difference ~ reference)
+
+```
+
+
+
+```{r}
+
+hypotheses(mod, 
+  hypothesis = "b2 - b1 = 0", 
+  equivalence = c(-0.05, 0.05))
+
+
+```
+
+Non-inferiority: is the value lower than .05?
+Non-superiority: is the value higher than .05?
+Equivalence:     are the values equal?
+
+
+
+
+```{r}
+predictions(mod)
+```
+Grid
+
+```{r}
+
+# predictions(mod, datagrid(Bwt = c(1:5), model = mod))
+# predictions(mod, newdata = "mean")
+predictions(mod, newdata = "balanced")
+
+```
+
+Pick up here with counter factuals
